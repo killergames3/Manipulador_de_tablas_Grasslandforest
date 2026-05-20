@@ -1,0 +1,1312 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>InvoiceSystem — Somnia Testnet</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Syne:wght@400;600;800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.1/ethers.umd.min.js"></script>
+<style>
+  :root {
+    --bg:       #07080d;
+    --bg2:      #0d0f18;
+    --bg3:      #131620;
+    --border:   #1e2233;
+    --accent:   #00e5ff;
+    --accent2:  #7c3aed;
+    --green:    #00ffa3;
+    --red:      #ff3b5c;
+    --yellow:   #ffd166;
+    --text:     #c8cfe8;
+    --dim:      #4a5172;
+    --glow:     0 0 20px rgba(0,229,255,.18);
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Space Mono', monospace;
+    font-size: 13px;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── BACKGROUND GRID ── */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background-image:
+      linear-gradient(rgba(0,229,255,.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,229,255,.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ── HEADER ── */
+  header {
+    position: relative; z-index: 10;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 18px 32px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(13,15,24,.95);
+    backdrop-filter: blur(8px);
+  }
+  .logo {
+    font-family: 'Syne', sans-serif;
+    font-weight: 800;
+    font-size: 18px;
+    color: #fff;
+    letter-spacing: -.5px;
+  }
+  .logo span { color: var(--accent); }
+  .network-badge {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 14px;
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    font-size: 11px;
+    color: var(--dim);
+  }
+  .network-badge .dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--dim);
+    transition: background .3s;
+  }
+  .network-badge.connected .dot { background: var(--green); box-shadow: 0 0 8px var(--green); }
+  .network-badge.connected { color: var(--text); }
+
+  #btn-connect {
+    padding: 8px 20px;
+    background: transparent;
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    border-radius: 6px;
+    cursor: pointer;
+    font-family: 'Space Mono', monospace;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: .5px;
+    transition: all .2s;
+  }
+  #btn-connect:hover { background: var(--accent); color: var(--bg); box-shadow: var(--glow); }
+  #btn-connect.connected { border-color: var(--green); color: var(--green); }
+  #btn-connect.connected:hover { background: var(--green); color: var(--bg); }
+
+  /* ── WALLET INFO BAR ── */
+  #wallet-bar {
+    display: none;
+    position: relative; z-index: 9;
+    padding: 10px 32px;
+    background: var(--bg2);
+    border-bottom: 1px solid var(--border);
+    font-size: 11px;
+    color: var(--dim);
+    gap: 24px;
+    flex-wrap: wrap;
+  }
+  #wallet-bar.show { display: flex; align-items: center; }
+  #wallet-bar .info-item { display: flex; align-items: center; gap: 8px; }
+  #wallet-bar .info-item span:first-child { color: var(--dim); }
+  #wallet-bar .info-item span:last-child { color: var(--text); }
+
+  /* ── MAIN LAYOUT ── */
+  main {
+    position: relative; z-index: 1;
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 28px 32px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+  }
+
+  /* ── PANELS ── */
+  .panel {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    transition: border-color .2s;
+  }
+  .panel:hover { border-color: #2a3050; }
+  .panel.full-width { grid-column: 1 / -1; }
+
+  .panel-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg3);
+  }
+  .panel-title {
+    font-family: 'Syne', sans-serif;
+    font-weight: 600;
+    font-size: 13px;
+    color: #fff;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .panel-title .icon {
+    width: 26px; height: 26px;
+    border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px;
+  }
+  .icon-blue   { background: rgba(0,229,255,.12); color: var(--accent); }
+  .icon-purple { background: rgba(124,58,237,.15); color: #a78bfa; }
+  .icon-green  { background: rgba(0,255,163,.12); color: var(--green); }
+  .icon-yellow { background: rgba(255,209,102,.12); color: var(--yellow); }
+  .icon-red    { background: rgba(255,59,92,.12); color: var(--red); }
+
+  .panel-body { padding: 18px 20px; }
+
+  /* ── FORM ELEMENTS ── */
+  label {
+    display: block;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    color: var(--dim);
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  input, textarea, select {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--text);
+    font-family: 'Space Mono', monospace;
+    font-size: 12px;
+    padding: 9px 12px;
+    outline: none;
+    transition: border-color .2s, box-shadow .2s;
+    margin-bottom: 14px;
+  }
+  input:focus, textarea:focus, select:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px rgba(0,229,255,.1);
+  }
+  textarea { resize: vertical; min-height: 110px; line-height: 1.7; }
+
+  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .form-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+
+  /* ── BUTTONS ── */
+  .btn {
+    padding: 10px 18px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-family: 'Space Mono', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .5px;
+    transition: all .2s;
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .btn:disabled { opacity: .4; cursor: not-allowed; }
+
+  .btn-primary { background: var(--accent); color: var(--bg); }
+  .btn-primary:hover:not(:disabled) { background: #33eaff; box-shadow: var(--glow); }
+
+  .btn-success { background: var(--green); color: var(--bg); }
+  .btn-success:hover:not(:disabled) { background: #33ffb7; box-shadow: 0 0 20px rgba(0,255,163,.2); }
+
+  .btn-danger { background: var(--red); color: #fff; }
+  .btn-danger:hover:not(:disabled) { background: #ff5577; box-shadow: 0 0 20px rgba(255,59,92,.2); }
+
+  .btn-secondary {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text);
+  }
+  .btn-secondary:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+
+  .btn-purple { background: var(--accent2); color: #fff; }
+  .btn-purple:hover:not(:disabled) { background: #8b5cf6; box-shadow: 0 0 20px rgba(124,58,237,.3); }
+
+  .btn-sm { padding: 6px 12px; font-size: 10px; }
+  .btn-full { width: 100%; justify-content: center; }
+
+  .btn-group { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+
+  /* ── LOG / OUTPUT ── */
+  .log-box {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px;
+    min-height: 80px;
+    max-height: 240px;
+    overflow-y: auto;
+    font-size: 11px;
+    line-height: 1.8;
+    margin-top: 14px;
+  }
+  .log-box .entry { display: flex; gap: 8px; align-items: flex-start; }
+  .log-box .ts { color: var(--dim); flex-shrink: 0; }
+  .log-box .ok  { color: var(--green); }
+  .log-box .err { color: var(--red); }
+  .log-box .inf { color: var(--accent); }
+  .log-box .warn{ color: var(--yellow); }
+  .log-box .hash a {
+    color: var(--accent);
+    text-decoration: none;
+    font-size: 10px;
+  }
+  .log-box .hash a:hover { text-decoration: underline; }
+
+  /* ── STATS GRID ── */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    margin-top: 14px;
+  }
+  .stat-card {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+    text-align: center;
+  }
+  .stat-card .stat-val {
+    font-family: 'Syne', sans-serif;
+    font-size: 20px;
+    font-weight: 800;
+    color: #fff;
+    margin-bottom: 4px;
+  }
+  .stat-card .stat-lbl {
+    font-size: 9px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--dim);
+  }
+
+  /* ── INVOICE CARD ── */
+  .invoice-card {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px;
+    margin-top: 14px;
+  }
+  .invoice-card .row {
+    display: flex; justify-content: space-between;
+    padding: 5px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 11px;
+  }
+  .invoice-card .row:last-child { border-bottom: none; }
+  .invoice-card .row .k { color: var(--dim); }
+  .invoice-card .row .v { color: var(--text); font-weight: 700; }
+  .invoice-card .row .active { color: var(--green); }
+  .invoice-card .row .inactive { color: var(--red); }
+
+  /* ── BATCH TABLE ── */
+  .batch-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+    margin-top: 10px;
+  }
+  .batch-table th {
+    text-align: left;
+    padding: 7px 10px;
+    background: var(--bg3);
+    color: var(--dim);
+    font-size: 9px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--border);
+  }
+  .batch-table td {
+    padding: 7px 10px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text);
+    vertical-align: middle;
+  }
+  .batch-table tr:last-child td { border-bottom: none; }
+  .batch-table .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 9px;
+    font-weight: 700;
+  }
+  .badge-pending  { background: rgba(255,209,102,.15); color: var(--yellow); }
+  .badge-ok       { background: rgba(0,255,163,.12); color: var(--green); }
+  .badge-err      { background: rgba(255,59,92,.12); color: var(--red); }
+  .badge-sending  { background: rgba(0,229,255,.12); color: var(--accent); }
+
+  /* ── TABS ── */
+  .tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--border); margin-bottom: 18px; }
+  .tab {
+    padding: 8px 16px;
+    cursor: pointer;
+    font-size: 11px;
+    color: var(--dim);
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    transition: all .15s;
+  }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .tab:hover:not(.active) { color: var(--text); }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  /* ── HINT ── */
+  .hint {
+    font-size: 10px;
+    color: var(--dim);
+    margin-top: -10px;
+    margin-bottom: 14px;
+    line-height: 1.6;
+  }
+  .hint code {
+    background: var(--bg);
+    padding: 1px 5px;
+    border-radius: 3px;
+    color: var(--accent);
+  }
+
+  /* ── SPINNER ── */
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .spin {
+    display: inline-block;
+    width: 12px; height: 12px;
+    border: 2px solid rgba(255,255,255,.2);
+    border-top-color: currentColor;
+    border-radius: 50%;
+    animation: spin .6s linear infinite;
+  }
+
+  /* ── SCROLLBAR ── */
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: var(--bg2); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: #2d3355; }
+
+  /* ── EMPTY STATE ── */
+  .empty {
+    text-align: center;
+    padding: 24px;
+    color: var(--dim);
+    font-size: 11px;
+  }
+
+  .section-sep { height: 14px; }
+  .mt-8 { margin-top: 8px; }
+  .mt-4 { margin-top: 4px; }
+</style>
+</head>
+<body>
+
+<!-- ── HEADER ── -->
+<header>
+  <div class="logo">Invoice<span>System</span></div>
+  <div class="network-badge" id="net-badge">
+    <div class="dot"></div>
+    <span id="net-name">Somnia Testnet</span>
+  </div>
+  <button id="btn-connect" onclick="connectWallet()">⚡ Conectar Wallet</button>
+</header>
+
+<!-- ── WALLET BAR ── -->
+<div id="wallet-bar">
+  <div class="info-item"><span>Wallet:</span><span id="wi-addr">—</span></div>
+  <div class="info-item"><span>Balance:</span><span id="wi-bal">—</span></div>
+  <div class="info-item"><span>Chain ID:</span><span id="wi-chain">—</span></div>
+  <div class="info-item"><span>Contrato:</span><span id="wi-contract">—</span></div>
+</div>
+
+<!-- ── MAIN ── -->
+<main>
+
+  <!-- ══ PANEL: SET LIMITS (batch) ══ -->
+  <div class="panel full-width">
+    <div class="panel-header">
+      <div class="panel-title">
+        <div class="icon icon-blue">⚙</div>
+        setLimit — Configurar límites de tipos
+      </div>
+    </div>
+    <div class="panel-body">
+      <div class="tabs">
+        <div class="tab active" onclick="switchTab('batch-tabs','t-txt')">📄 Desde TXT / texto</div>
+        <div class="tab" onclick="switchTab('batch-tabs','t-manual')">✏️ Manual</div>
+      </div>
+
+      <!-- TAB: TEXTO -->
+      <div class="tab-panel active" id="t-txt">
+        <label>Pega o edita las líneas (formato: <code>Tipo,limit,perInvoiceLimit</code> — las líneas con # son comentarios)</label>
+        <textarea id="txt-input" spellcheck="false" placeholder="# Comentario&#10;Espada_Comun,10000,500&#10;Pocion_Vida,50000,1000&#10;Oro_Barra,10000,500"></textarea>
+        <div class="btn-group">
+          <button class="btn btn-secondary" onclick="parseTxtInput()">🔍 Parsear / Vista previa</button>
+          <button class="btn btn-secondary btn-sm" onclick="loadDefaultTxt()">Cargar ejemplo</button>
+        </div>
+
+        <!-- TABLA PARSEADA -->
+        <div id="parsed-section" style="display:none;margin-top:16px;">
+          <label>Vista previa — <span id="parsed-count">0</span> tipo(s) listos</label>
+          <div style="overflow-x:auto;">
+            <table class="batch-table" id="parsed-table">
+              <thead><tr>
+                <th>#</th><th>Tipo</th><th>Limit</th><th>perInvoiceLimit</th><th>Estado</th>
+              </tr></thead>
+              <tbody id="parsed-tbody"></tbody>
+            </table>
+          </div>
+          <div class="btn-group mt-8">
+            <button class="btn btn-primary" onclick="sendBatch()" id="btn-send-batch">
+              ⚡ Enviar todas las transacciones
+            </button>
+            <button class="btn btn-secondary" onclick="clearBatch()">✕ Limpiar</button>
+          </div>
+        </div>
+        <div class="log-box" id="log-batch"><div class="empty">El log aparecerá aquí</div></div>
+      </div>
+
+      <!-- TAB: MANUAL -->
+      <div class="tab-panel" id="t-manual">
+        <div class="form-row-3">
+          <div>
+            <label>Tipo (string)</label>
+            <input id="m-tipo" type="text" placeholder="Espada_Comun">
+          </div>
+          <div>
+            <label>Limit (uint256)</label>
+            <input id="m-limit" type="number" min="1" placeholder="10000">
+          </div>
+          <div>
+            <label>perInvoiceLimit (uint256)</label>
+            <input id="m-pil" type="number" min="1" placeholder="500">
+          </div>
+        </div>
+        <button class="btn btn-primary btn-full" onclick="sendManualLimit()">⚡ Llamar setLimit()</button>
+        <div class="log-box" id="log-manual"><div class="empty">El log aparecerá aquí</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ PANEL: GET TIPO STATS ══ -->
+  <div class="panel">
+    <div class="panel-header">
+      <div class="panel-title">
+        <div class="icon icon-purple">📊</div>
+        getTipoStats — Estadísticas de tipo
+      </div>
+    </div>
+    <div class="panel-body">
+      <label>Nombre del tipo</label>
+      <input id="gs-tipo" type="text" placeholder="Espada_Comun">
+      <button class="btn btn-purple btn-full" onclick="queryTipoStats()">🔎 Consultar</button>
+      <div id="stats-result" style="display:none;">
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-val" id="sr-total">—</div>
+            <div class="stat-lbl">Total Qty</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-val" id="sr-limit" style="color:var(--accent)">—</div>
+            <div class="stat-lbl">Limit</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-val" id="sr-pil" style="color:var(--accent2)">—</div>
+            <div class="stat-lbl">perInvoiceLimit</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-val" id="sr-inv">—</div>
+            <div class="stat-lbl">Invoices</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-val" id="sr-burned" style="color:var(--red)">—</div>
+            <div class="stat-lbl">Total Burned</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-val" id="sr-exists">—</div>
+            <div class="stat-lbl">¿Existe?</div>
+          </div>
+        </div>
+      </div>
+      <div class="log-box" id="log-stats"><div class="empty">Resultados aquí</div></div>
+    </div>
+  </div>
+
+  <!-- ══ PANEL: CREATE INVOICE ══ -->
+  <div class="panel">
+    <div class="panel-header">
+      <div class="panel-title">
+        <div class="icon icon-green">📄</div>
+        createInvoice — Nueva factura
+      </div>
+    </div>
+    <div class="panel-body">
+      <label>Owner (address)</label>
+      <input id="ci-owner" type="text" placeholder="0xDirección...">
+      <div class="form-row">
+        <div>
+          <label>Tipo (string)</label>
+          <input id="ci-tipo" type="text" placeholder="Espada_Comun">
+        </div>
+        <div>
+          <label>Cantidad (uint256)</label>
+          <input id="ci-qty" type="number" min="1" placeholder="100">
+        </div>
+      </div>
+      <label>Manual ID (string — max 32 chars)</label>
+      <input id="ci-mid" type="text" placeholder="INV-001">
+      <div class="hint">El manualId es un identificador único que tú controlas. Puede ser cualquier string.</div>
+      <button class="btn btn-success btn-full" onclick="createInvoice()">✚ Crear Factura</button>
+      <div class="log-box" id="log-create"><div class="empty">Resultado aquí</div></div>
+    </div>
+  </div>
+
+  <!-- ══ PANEL: GET INVOICE ══ -->
+  <div class="panel">
+    <div class="panel-header">
+      <div class="panel-title">
+        <div class="icon icon-yellow">🔍</div>
+        getInvoice — Consultar factura
+      </div>
+    </div>
+    <div class="panel-body">
+      <div class="tabs">
+        <div class="tab active" onclick="switchTab('inv-tabs','t-byid')">Por ID numérico</div>
+        <div class="tab" onclick="switchTab('inv-tabs','t-bymid')">Por Manual ID</div>
+      </div>
+      <div class="tab-panel active" id="t-byid">
+        <label>Invoice ID (uint256)</label>
+        <input id="gi-id" type="number" min="0" placeholder="1">
+        <button class="btn btn-primary btn-full" onclick="getInvoiceById()">🔍 Buscar</button>
+      </div>
+      <div class="tab-panel" id="t-bymid">
+        <label>Manual ID (string)</label>
+        <input id="gi-mid" type="text" placeholder="INV-001">
+        <button class="btn btn-primary btn-full" onclick="getInvoiceByMid()">🔍 Buscar</button>
+      </div>
+      <div id="inv-result" style="display:none;" class="invoice-card">
+        <div class="row"><span class="k">ID</span><span class="v" id="ir-id">—</span></div>
+        <div class="row"><span class="k">Manual ID</span><span class="v" id="ir-mid">—</span></div>
+        <div class="row"><span class="k">Owner</span><span class="v" id="ir-owner">—</span></div>
+        <div class="row"><span class="k">Tipo</span><span class="v" id="ir-tipo">—</span></div>
+        <div class="row"><span class="k">Cantidad</span><span class="v" id="ir-qty">—</span></div>
+        <div class="row"><span class="k">Activa</span><span class="v" id="ir-active">—</span></div>
+        <div class="row"><span class="k">Creada</span><span class="v" id="ir-created">—</span></div>
+      </div>
+      <div class="log-box" id="log-inv"><div class="empty">Resultado aquí</div></div>
+    </div>
+  </div>
+
+  <!-- ══ PANEL: MANAGE INVOICE QUANTITY ══ -->
+  <div class="panel">
+    <div class="panel-header">
+      <div class="panel-title">
+        <div class="icon icon-blue">↕</div>
+        Quantity — Aumentar / Disminuir
+      </div>
+    </div>
+    <div class="panel-body">
+      <div class="form-row">
+        <div>
+          <label>Invoice ID</label>
+          <input id="qty-id" type="number" min="1" placeholder="1">
+        </div>
+        <div>
+          <label>Cantidad</label>
+          <input id="qty-amount" type="number" min="1" placeholder="50">
+        </div>
+      </div>
+      <div class="btn-group">
+        <button class="btn btn-success" onclick="changeQty('increase')">▲ Aumentar</button>
+        <button class="btn btn-danger" onclick="changeQty('decrease')">▼ Disminuir</button>
+      </div>
+      <div class="log-box" id="log-qty"><div class="empty">Resultado aquí</div></div>
+    </div>
+  </div>
+
+  <!-- ══ PANEL: DELETE / DEPRECATE ══ -->
+  <div class="panel">
+    <div class="panel-header">
+      <div class="panel-title">
+        <div class="icon icon-red">🗑</div>
+        Eliminar / Deprecar
+      </div>
+    </div>
+    <div class="panel-body">
+      <!-- DELETE INVOICE -->
+      <label>Eliminar factura por ID</label>
+      <div style="display:flex;gap:8px;margin-bottom:14px;">
+        <input id="del-id" type="number" min="1" placeholder="Invoice ID" style="margin:0;flex:1;">
+        <button class="btn btn-danger" onclick="deleteInvoice()" style="flex-shrink:0;margin:0;">🗑 Eliminar</button>
+      </div>
+
+      <!-- DEPRECATE TIPO -->
+      <label>Deprecar tipo</label>
+      <div class="hint">Esto marca el tipo como inactivo. Acción irreversible.</div>
+      <div style="display:flex;gap:8px;margin-bottom:4px;">
+        <input id="dep-tipo" type="text" placeholder="Espada_Comun" style="margin:0;flex:1;">
+        <button class="btn btn-danger" onclick="deprecateTipo()" style="flex-shrink:0;margin:0;">⚠ Deprecar</button>
+      </div>
+      <div class="log-box" id="log-del"><div class="empty">Resultado aquí</div></div>
+    </div>
+  </div>
+
+  <!-- ══ PANEL: TRANSFER ══ -->
+  <div class="panel full-width">
+    <div class="panel-header">
+      <div class="panel-title">
+        <div class="icon icon-purple">↔</div>
+        Transferencias
+      </div>
+    </div>
+    <div class="panel-body">
+      <div class="tabs">
+        <div class="tab active" onclick="switchTab('tx-tabs','t-txinv')">transferInvoice</div>
+        <div class="tab" onclick="switchTab('tx-tabs','t-txqty')">transferQuantityBetweenInvoices</div>
+      </div>
+
+      <!-- transferInvoice -->
+      <div class="tab-panel active" id="t-txinv">
+        <div class="form-row">
+          <div>
+            <label>fromOwner (address)</label>
+            <input id="tf-from" type="text" placeholder="0x...">
+          </div>
+          <div>
+            <label>toOwner (address)</label>
+            <input id="tf-to" type="text" placeholder="0x...">
+          </div>
+        </div>
+        <div class="form-row-3">
+          <div>
+            <label>Invoice ID</label>
+            <input id="tf-id" type="number" placeholder="1">
+          </div>
+          <div>
+            <label>Amount</label>
+            <input id="tf-amt" type="number" placeholder="100">
+          </div>
+          <div>
+            <label>New Manual ID</label>
+            <input id="tf-nmid" type="text" placeholder="INV-002">
+          </div>
+        </div>
+        <button class="btn btn-purple btn-full" onclick="transferInvoice()">⇄ transferInvoice()</button>
+      </div>
+
+      <!-- transferQuantity -->
+      <div class="tab-panel" id="t-txqty">
+        <div class="form-row-3">
+          <div>
+            <label>From Invoice ID</label>
+            <input id="tq-from" type="number" placeholder="1">
+          </div>
+          <div>
+            <label>To Invoice ID</label>
+            <input id="tq-to" type="number" placeholder="2">
+          </div>
+          <div>
+            <label>Amount</label>
+            <input id="tq-amt" type="number" placeholder="50">
+          </div>
+        </div>
+        <button class="btn btn-purple btn-full" onclick="transferQtyBetween()">⇄ transferQuantityBetweenInvoices()</button>
+      </div>
+
+      <div class="log-box" id="log-tx"><div class="empty">Resultado aquí</div></div>
+    </div>
+  </div>
+
+</main>
+
+<!-- ═══════════════════════════════════════════════════════════ SCRIPT ════ -->
+<script>
+// ─────────────────────────────────────────────────────────────────────────────
+//  CONFIGURACIÓN
+// ─────────────────────────────────────────────────────────────────────────────
+const CONTRACT_ADDRESS = '0x4356Eb1A19ed6302d1a9582A5d684bF76cafd97e';
+const SOMNIA_CHAIN_ID  = '0xC488'; // 50312 decimal — Somnia Shannon testnet
+const SOMNIA_RPC       = 'https://dream-rpc.somnia.network';
+const EXPLORER_BASE    = 'https://shannon-explorer.somnia.network';
+
+const ABI = [
+  "function setLimit(string calldata _tipo, uint256 _limit, uint256 _perInvoiceLimit) external",
+  "function createInvoice(address _owner, string calldata _tipo, uint256 _cantidad, string calldata _manualId) external returns (uint256)",
+  "function decreaseInvoiceQuantity(uint256 _id, uint256 _decreaseAmount) external returns (uint256)",
+  "function increaseInvoiceQuantity(uint256 _id, uint256 _increaseAmount) external returns (uint256)",
+  "function deleteInvoice(uint256 _id) external",
+  "function deprecateTipo(string calldata _tipo) external",
+  "function transferInvoice(address _fromOwner, address _toOwner, uint256 _id, uint256 _amount, string calldata _newManualId) external returns (uint256)",
+  "function transferQuantityBetweenInvoices(uint256 fromId, uint256 toId, uint256 amount) external",
+  "function getTipoStats(string calldata _tipo) external view returns (uint256 totalQuantity, uint256 limit, uint256 perInvoiceLimit, uint256 invoiceCount, uint256 totalBurned, bool exists)",
+  "function getInvoice(uint256 _id) external view returns (tuple(uint256 id, string manualId, address owner, string tipo, uint256 cantidad, bool active, uint256 createdAt))",
+  "function getInvoiceByManualId(string calldata _manualId) external view returns (tuple(uint256 id, string manualId, address owner, string tipo, uint256 cantidad, bool active, uint256 createdAt))",
+  "function owner() external view returns (address)",
+  "event TipoLimitSet(string tipo, uint256 limit, uint256 perInvoiceLimit)",
+  "event InvoiceCreated(uint256 indexed id, string manualId, address indexed owner, string indexed tipo, uint256 cantidad, uint256 createdAt)"
+];
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  STATE
+// ─────────────────────────────────────────────────────────────────────────────
+let provider = null;
+let signer   = null;
+let contract = null;
+let batchEntries = [];
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  WALLET CONNECTION
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Espera hasta 3 segundos a que MetaMask inyecte window.ethereum
+function waitForEthereum(ms = 3000) {
+  return new Promise(resolve => {
+    if (window.ethereum) return resolve(window.ethereum);
+    const t = setTimeout(() => resolve(null), ms);
+    window.addEventListener('ethereum#initialized', () => {
+      clearTimeout(t); resolve(window.ethereum);
+    }, { once: true });
+  });
+}
+
+async function connectWallet() {
+  const btn = document.getElementById('btn-connect');
+  btn.textContent = '⏳ Conectando…';
+  btn.disabled = true;
+
+  const eth = await waitForEthereum();
+
+  if (!eth) {
+    btn.textContent = '⚡ Conectar Wallet';
+    btn.disabled = false;
+    alert(
+      'MetaMask no detectado.\n\n' +
+      '• Asegúrate de tener la extensión instalada en este navegador.\n' +
+      '• Si usas Brave, activa "Usar MetaMask" en brave://settings/wallet.\n' +
+      '• Si acabas de instalarla, recarga la página e intenta de nuevo.\n\n' +
+      'También puedes abrir este archivo desde un servidor local (npx serve .) ' +
+      'en lugar de directamente como file://.'
+    );
+    return;
+  }
+
+  try {
+    // request accounts
+    await eth.request({ method: 'eth_requestAccounts' });
+
+    // switch / add Somnia testnet
+    try {
+      await eth.request({
+        method: 'wallet_switchEthereumChain',
+        params: [{ chainId: SOMNIA_CHAIN_ID }],
+      });
+    } catch (swErr) {
+      if (swErr.code === 4902) {
+        try {
+          await eth.request({
+            method: 'wallet_addEthereumChain',
+            params: [{
+              chainId: SOMNIA_CHAIN_ID,
+              chainName: 'Somnia Shannon Testnet',
+              nativeCurrency: { name: 'STT', symbol: 'STT', decimals: 18 },
+              rpcUrls: [SOMNIA_RPC],
+              blockExplorerUrls: [EXPLORER_BASE],
+            }],
+          });
+        } catch (addErr) {
+          // La red ya existe con ese RPC — ignorar el error y continuar
+          // MetaMask ya la tiene, solo hay que hacer el switch
+          console.warn('addEthereumChain:', addErr.message);
+          try {
+            await eth.request({
+              method: 'wallet_switchEthereumChain',
+              params: [{ chainId: SOMNIA_CHAIN_ID }],
+            });
+          } catch (_) { /* si ya estamos en la red, ignorar */ }
+        }
+      }
+      // Si el error no es 4902 (red no existe), ignorar y seguir
+    }
+
+    provider = new ethers.BrowserProvider(eth);
+    signer   = await provider.getSigner();
+    contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
+
+    const addr    = await signer.getAddress();
+    const network = await provider.getNetwork();
+    const balance = await provider.getBalance(addr);
+
+    // UI updates
+    document.getElementById('btn-connect').textContent = '✓ ' + shortAddr(addr);
+    document.getElementById('btn-connect').classList.add('connected');
+    document.getElementById('net-badge').classList.add('connected');
+    document.getElementById('net-name').textContent = 'Somnia Testnet';
+    document.getElementById('wallet-bar').classList.add('show');
+    document.getElementById('wi-addr').textContent    = addr;
+    document.getElementById('wi-bal').textContent     = parseFloat(ethers.formatEther(balance)).toFixed(4) + ' STT';
+    document.getElementById('wi-chain').textContent   = network.chainId.toString();
+    document.getElementById('wi-contract').textContent = shortAddr(CONTRACT_ADDRESS);
+
+    // auto-fill ci-owner
+    document.getElementById('ci-owner').value = addr;
+    document.getElementById('tf-from').value  = addr;
+
+  } catch (e) {
+    btn.textContent = '⚡ Conectar Wallet';
+    btn.disabled = false;
+    if (e.code === 4001) {
+      alert('Conexión rechazada. Acepta la solicitud en MetaMask.');
+    } else {
+      alert('Error al conectar: ' + (e.message || e));
+    }
+  }
+}
+
+// Listen for account / chain changes
+window.addEventListener('load', () => {
+  if (window.ethereum) {
+    window.ethereum.on('accountsChanged', () => location.reload());
+    window.ethereum.on('chainChanged',    () => location.reload());
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  HELPERS
+// ─────────────────────────────────────────────────────────────────────────────
+function shortAddr(a) { return a.slice(0,6) + '…' + a.slice(-4); }
+function ts() { return new Date().toLocaleTimeString('es', {hour:'2-digit',minute:'2-digit',second:'2-digit'}); }
+function fmtBig(n) { return BigInt(n).toLocaleString('en-US'); }
+
+function appendLog(logId, type, msg, txHash) {
+  const box = document.getElementById(logId);
+  const empty = box.querySelector('.empty');
+  if (empty) empty.remove();
+
+  const div = document.createElement('div');
+  div.className = 'entry';
+
+  let hashHtml = '';
+  if (txHash) {
+    const url = `${EXPLORER_BASE}/tx/${txHash}`;
+    hashHtml = ` <span class="hash"><a href="${url}" target="_blank">[ver tx ↗]</a></span>`;
+  }
+
+  div.innerHTML = `<span class="ts">${ts()}</span><span class="${type}">${msg}${hashHtml}</span>`;
+  box.appendChild(div);
+  box.scrollTop = box.scrollHeight;
+}
+
+function requireConnected(logId) {
+  if (!contract) {
+    appendLog(logId, 'err', '⚠ Conecta tu wallet primero.');
+    return false;
+  }
+  return true;
+}
+
+function extractError(err) {
+  if (err?.reason)        return err.reason;
+  if (err?.shortMessage)  return err.shortMessage;
+  const m = err?.message || '';
+  const match = m.match(/reason="([^"]+)"/);
+  if (match) return match[1];
+  if (m.includes('user rejected')) return 'Transacción rechazada por el usuario';
+  return m.slice(0, 120) || 'error desconocido';
+}
+
+function switchTab(group, activeId) {
+  // find parent
+  const active = document.getElementById(activeId);
+  const parent = active.closest('.panel-body') || active.parentElement.parentElement;
+  const allTabs   = parent.querySelectorAll('.tab');
+  const allPanels = parent.querySelectorAll('.tab-panel');
+  allTabs.forEach(t => t.classList.remove('active'));
+  allPanels.forEach(p => p.classList.remove('active'));
+  active.classList.add('active');
+  // activate matching tab button by index
+  const panels = Array.from(allPanels);
+  const idx = panels.indexOf(active);
+  allTabs[idx]?.classList.add('active');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  PARSE TXT
+// ─────────────────────────────────────────────────────────────────────────────
+const DEFAULT_TXT = `# Armas
+Espada_Comun,10000,500
+Espada_Rara,5000,250
+Hacha_Comun,10000,500
+Arco_Comun,8000,400
+
+# Armaduras
+Escudo_Comun,10000,500
+Escudo_Raro,3000,150
+Casco_Comun,10000,500
+Pechera_Comun,10000,500
+
+# Consumibles
+Pocion_Vida,50000,1000
+Pocion_Mana,50000,1000
+Antidoto,20000,500
+
+# Materiales
+Madera,100000,5000
+Piedra,100000,5000
+Hierro,50000,2000
+Oro_Barra,10000,500`;
+
+function loadDefaultTxt() {
+  document.getElementById('txt-input').value = DEFAULT_TXT;
+  parseTxtInput();
+}
+
+function parseTxtInput() {
+  const raw = document.getElementById('txt-input').value;
+  const lines = raw.split('\n');
+  const entries = [];
+  const errors  = [];
+
+  lines.forEach((rawLine, idx) => {
+    const line = rawLine.trim();
+    if (!line || line.startsWith('#')) return;
+
+    const parts = line.split(',').map(p => p.trim());
+    if (parts.length !== 3) {
+      errors.push(`Línea ${idx+1}: formato incorrecto → "${line}"`);
+      return;
+    }
+    const [tipo, limitStr, pilStr] = parts;
+    if (!tipo || tipo.length > 64) { errors.push(`Línea ${idx+1}: nombre inválido`); return; }
+
+    let limit, pil;
+    try { limit = BigInt(limitStr); pil = BigInt(pilStr); } catch { errors.push(`Línea ${idx+1}: valores no numéricos`); return; }
+    if (limit <= 0n) { errors.push(`Línea ${idx+1}: limit debe ser > 0`); return; }
+    if (pil   <= 0n) { errors.push(`Línea ${idx+1}: perInvoiceLimit debe ser > 0`); return; }
+
+    entries.push({ tipo, limit, pil, status: 'pending' });
+  });
+
+  if (errors.length) {
+    const logBox = document.getElementById('log-batch');
+    logBox.innerHTML = '';
+    errors.forEach(e => appendLog('log-batch','err', e));
+  }
+
+  if (!entries.length) {
+    document.getElementById('parsed-section').style.display = 'none';
+    if (!errors.length) appendLog('log-batch','warn','No se encontraron entradas válidas.');
+    return;
+  }
+
+  batchEntries = entries;
+  renderBatchTable();
+  document.getElementById('parsed-section').style.display = 'block';
+  document.getElementById('parsed-count').textContent = entries.length;
+}
+
+function renderBatchTable() {
+  const tbody = document.getElementById('parsed-tbody');
+  tbody.innerHTML = '';
+  batchEntries.forEach((e, i) => {
+    const badgeMap = {
+      pending: 'badge-pending',
+      ok:      'badge-ok',
+      err:     'badge-err',
+      sending: 'badge-sending',
+    };
+    const labelMap = { pending:'Pendiente', ok:'✓ OK', err:'✗ Error', sending:'Enviando…' };
+    tbody.innerHTML += `
+      <tr id="brow-${i}">
+        <td>${i+1}</td>
+        <td>${e.tipo}</td>
+        <td>${fmtBig(e.limit)}</td>
+        <td>${fmtBig(e.pil)}</td>
+        <td><span class="badge ${badgeMap[e.status]}">${labelMap[e.status]}</span></td>
+      </tr>`;
+  });
+}
+
+function clearBatch() {
+  batchEntries = [];
+  document.getElementById('parsed-section').style.display = 'none';
+  document.getElementById('log-batch').innerHTML = '<div class="empty">El log aparecerá aquí</div>';
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  SEND BATCH
+// ─────────────────────────────────────────────────────────────────────────────
+async function sendBatch() {
+  if (!requireConnected('log-batch')) return;
+  if (!batchEntries.length) { appendLog('log-batch','warn','Nada que enviar.'); return; }
+
+  const btn = document.getElementById('btn-send-batch');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spin"></span> Enviando…';
+
+  let ok = 0, fail = 0;
+
+  for (let i = 0; i < batchEntries.length; i++) {
+    const e = batchEntries[i];
+    batchEntries[i].status = 'sending';
+    renderBatchTable();
+
+    try {
+      appendLog('log-batch', 'inf', `→ ${e.tipo}: enviando…`);
+      const tx = await contract.setLimit(e.tipo, e.limit, e.pil);
+      appendLog('log-batch', 'inf', `${e.tipo}: esperando confirmación…`, tx.hash);
+      const receipt = await tx.wait();
+
+      if (receipt.status === 1) {
+        batchEntries[i].status = 'ok';
+        appendLog('log-batch', 'ok', `✓ ${e.tipo} — gas: ${receipt.gasUsed.toLocaleString()}`, tx.hash);
+        ok++;
+      } else {
+        batchEntries[i].status = 'err';
+        appendLog('log-batch', 'err', `✗ ${e.tipo}: transacción revertida`);
+        fail++;
+      }
+    } catch (err) {
+      batchEntries[i].status = 'err';
+      appendLog('log-batch', 'err', `✗ ${e.tipo}: ${extractError(err)}`);
+      fail++;
+    }
+    renderBatchTable();
+  }
+
+  appendLog('log-batch', fail > 0 ? 'warn' : 'ok',
+    `═══ Resumen: ${ok} exitosas / ${fail} fallidas ═══`);
+
+  btn.disabled = false;
+  btn.innerHTML = '⚡ Enviar todas las transacciones';
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  MANUAL SET LIMIT
+// ─────────────────────────────────────────────────────────────────────────────
+async function sendManualLimit() {
+  if (!requireConnected('log-manual')) return;
+  const tipo  = document.getElementById('m-tipo').value.trim();
+  const limit = document.getElementById('m-limit').value.trim();
+  const pil   = document.getElementById('m-pil').value.trim();
+
+  if (!tipo || !limit || !pil) { appendLog('log-manual','warn','Completa todos los campos.'); return; }
+
+  try {
+    appendLog('log-manual','inf',`Llamando setLimit("${tipo}", ${limit}, ${pil})…`);
+    const tx = await contract.setLimit(tipo, BigInt(limit), BigInt(pil));
+    appendLog('log-manual','inf','Esperando confirmación…', tx.hash);
+    const r = await tx.wait();
+    if (r.status === 1)
+      appendLog('log-manual','ok',`✓ setLimit OK — gas: ${r.gasUsed.toLocaleString()}`, tx.hash);
+    else
+      appendLog('log-manual','err','✗ Transacción revertida');
+  } catch (e) {
+    appendLog('log-manual','err','✗ ' + extractError(e));
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  GET TIPO STATS
+// ─────────────────────────────────────────────────────────────────────────────
+async function queryTipoStats() {
+  if (!requireConnected('log-stats')) return;
+  const tipo = document.getElementById('gs-tipo').value.trim();
+  if (!tipo) { appendLog('log-stats','warn','Ingresa un tipo.'); return; }
+
+  try {
+    appendLog('log-stats','inf',`Consultando getTipoStats("${tipo}")…`);
+    const res = await contract.getTipoStats(tipo);
+    const [totalQty, limit, pil, invCount, totalBurned, exists] = res;
+
+    document.getElementById('sr-total').textContent   = fmtBig(totalQty);
+    document.getElementById('sr-limit').textContent   = fmtBig(limit);
+    document.getElementById('sr-pil').textContent     = fmtBig(pil);
+    document.getElementById('sr-inv').textContent     = fmtBig(invCount);
+    document.getElementById('sr-burned').textContent  = fmtBig(totalBurned);
+    document.getElementById('sr-exists').textContent  = exists ? '✓ Sí' : '✗ No';
+    document.getElementById('sr-exists').style.color  = exists ? 'var(--green)' : 'var(--red)';
+    document.getElementById('stats-result').style.display = 'block';
+    appendLog('log-stats','ok',`✓ Stats para "${tipo}" cargadas.`);
+  } catch (e) {
+    appendLog('log-stats','err','✗ ' + extractError(e));
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  CREATE INVOICE
+// ─────────────────────────────────────────────────────────────────────────────
+async function createInvoice() {
+  if (!requireConnected('log-create')) return;
+  const owner = document.getElementById('ci-owner').value.trim();
+  const tipo  = document.getElementById('ci-tipo').value.trim();
+  const qty   = document.getElementById('ci-qty').value.trim();
+  const mid   = document.getElementById('ci-mid').value.trim();
+
+  if (!owner || !tipo || !qty || !mid) { appendLog('log-create','warn','Completa todos los campos.'); return; }
+
+  try {
+    appendLog('log-create','inf',`Creando factura: tipo="${tipo}", qty=${qty}, manualId="${mid}"…`);
+    const tx = await contract.createInvoice(owner, tipo, BigInt(qty), mid);
+    appendLog('log-create','inf','Esperando confirmación…', tx.hash);
+    const r = await tx.wait();
+    if (r.status === 1)
+      appendLog('log-create','ok',`✓ Factura creada — gas: ${r.gasUsed.toLocaleString()}`, tx.hash);
+    else
+      appendLog('log-create','err','✗ Revertida');
+  } catch (e) {
+    appendLog('log-create','err','✗ ' + extractError(e));
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  GET INVOICE
+// ─────────────────────────────────────────────────────────────────────────────
+function fillInvoiceCard(inv) {
+  document.getElementById('ir-id').textContent      = inv.id.toString();
+  document.getElementById('ir-mid').textContent     = inv.manualId;
+  document.getElementById('ir-owner').textContent   = inv.owner;
+  document.getElementById('ir-tipo').textContent    = inv.tipo;
+  document.getElementById('ir-qty').textContent     = fmtBig(inv.cantidad);
+  const activeEl = document.getElementById('ir-active');
+  activeEl.textContent = inv.active ? '✓ Activa' : '✗ Inactiva';
+  activeEl.className   = 'v ' + (inv.active ? 'active' : 'inactive');
+  document.getElementById('ir-created').textContent =
+    new Date(Number(inv.createdAt) * 1000).toLocaleString('es');
+  document.getElementById('inv-result').style.display = 'block';
+}
+
+async function getInvoiceById() {
+  if (!requireConnected('log-inv')) return;
+  const id = document.getElementById('gi-id').value.trim();
+  if (!id) { appendLog('log-inv','warn','Ingresa un ID.'); return; }
+  try {
+    appendLog('log-inv','inf',`getInvoice(${id})…`);
+    const inv = await contract.getInvoice(BigInt(id));
+    fillInvoiceCard(inv);
+    appendLog('log-inv','ok','✓ Factura cargada.');
+  } catch (e) { appendLog('log-inv','err','✗ ' + extractError(e)); }
+}
+
+async function getInvoiceByMid() {
+  if (!requireConnected('log-inv')) return;
+  const mid = document.getElementById('gi-mid').value.trim();
+  if (!mid) { appendLog('log-inv','warn','Ingresa un Manual ID.'); return; }
+  try {
+    appendLog('log-inv','inf',`getInvoiceByManualId("${mid}")…`);
+    const inv = await contract.getInvoiceByManualId(mid);
+    fillInvoiceCard(inv);
+    appendLog('log-inv','ok','✓ Factura cargada.');
+  } catch (e) { appendLog('log-inv','err','✗ ' + extractError(e)); }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  CHANGE QUANTITY
+// ─────────────────────────────────────────────────────────────────────────────
+async function changeQty(dir) {
+  if (!requireConnected('log-qty')) return;
+  const id  = document.getElementById('qty-id').value.trim();
+  const amt = document.getElementById('qty-amount').value.trim();
+  if (!id || !amt) { appendLog('log-qty','warn','Completa ID y cantidad.'); return; }
+
+  const fn   = dir === 'increase' ? 'increaseInvoiceQuantity' : 'decreaseInvoiceQuantity';
+  const label = dir === 'increase' ? '▲ Aumentar' : '▼ Disminuir';
+  try {
+    appendLog('log-qty','inf',`${label} factura #${id} en ${amt}…`);
+    const tx = await contract[fn](BigInt(id), BigInt(amt));
+    appendLog('log-qty','inf','Esperando confirmación…', tx.hash);
+    const r = await tx.wait();
+    if (r.status === 1)
+      appendLog('log-qty','ok',`✓ OK — gas: ${r.gasUsed.toLocaleString()}`, tx.hash);
+    else
+      appendLog('log-qty','err','✗ Revertida');
+  } catch (e) { appendLog('log-qty','err','✗ ' + extractError(e)); }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  DELETE INVOICE
+// ─────────────────────────────────────────────────────────────────────────────
+async function deleteInvoice() {
+  if (!requireConnected('log-del')) return;
+  const id = document.getElementById('del-id').value.trim();
+  if (!id) { appendLog('log-del','warn','Ingresa el ID de la factura.'); return; }
+  if (!confirm(`¿Eliminar factura #${id}? Esta acción no se puede deshacer.`)) return;
+  try {
+    appendLog('log-del','inf',`deleteInvoice(${id})…`);
+    const tx = await contract.deleteInvoice(BigInt(id));
+    appendLog('log-del','inf','Esperando…', tx.hash);
+    const r = await tx.wait();
+    if (r.status === 1)
+      appendLog('log-del','ok',`✓ Factura #${id} eliminada.`, tx.hash);
+    else
+      appendLog('log-del','err','✗ Revertida');
+  } catch (e) { appendLog('log-del','err','✗ ' + extractError(e)); }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  DEPRECATE TIPO
+// ─────────────────────────────────────────────────────────────────────────────
+async function deprecateTipo() {
+  if (!requireConnected('log-del')) return;
+  const tipo = document.getElementById('dep-tipo').value.trim();
+  if (!tipo) { appendLog('log-del','warn','Ingresa el tipo a deprecar.'); return; }
+  if (!confirm(`¿Deprecar tipo "${tipo}"? Esta acción es irreversible.`)) return;
+  try {
+    appendLog('log-del','warn',`deprecateTipo("${tipo}")…`);
+    const tx = await contract.deprecateTipo(tipo);
+    appendLog('log-del','inf','Esperando…', tx.hash);
+    const r = await tx.wait();
+    if (r.status === 1)
+      appendLog('log-del','ok',`✓ Tipo "${tipo}" deprecado.`, tx.hash);
+    else
+      appendLog('log-del','err','✗ Revertida');
+  } catch (e) { appendLog('log-del','err','✗ ' + extractError(e)); }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  TRANSFER INVOICE
+// ─────────────────────────────────────────────────────────────────────────────
+async function transferInvoice() {
+  if (!requireConnected('log-tx')) return;
+  const from = document.getElementById('tf-from').value.trim();
+  const to   = document.getElementById('tf-to').value.trim();
+  const id   = document.getElementById('tf-id').value.trim();
+  const amt  = document.getElementById('tf-amt').value.trim();
+  const nmid = document.getElementById('tf-nmid').value.trim();
+  if (!from||!to||!id||!amt||!nmid) { appendLog('log-tx','warn','Completa todos los campos.'); return; }
+  try {
+    appendLog('log-tx','inf',`transferInvoice(#${id}, ${amt} → ${shortAddr(to)}, newId="${nmid}")…`);
+    const tx = await contract.transferInvoice(from, to, BigInt(id), BigInt(amt), nmid);
+    appendLog('log-tx','inf','Esperando…', tx.hash);
+    const r = await tx.wait();
+    if (r.status === 1)
+      appendLog('log-tx','ok',`✓ Transferencia completada.`, tx.hash);
+    else
+      appendLog('log-tx','err','✗ Revertida');
+  } catch (e) { appendLog('log-tx','err','✗ ' + extractError(e)); }
+}
+
+async function transferQtyBetween() {
+  if (!requireConnected('log-tx')) return;
+  const from = document.getElementById('tq-from').value.trim();
+  const to   = document.getElementById('tq-to').value.trim();
+  const amt  = document.getElementById('tq-amt').value.trim();
+  if (!from||!to||!amt) { appendLog('log-tx','warn','Completa todos los campos.'); return; }
+  try {
+    appendLog('log-tx','inf',`transferQuantityBetweenInvoices(#${from} → #${to}, ${amt})…`);
+    const tx = await contract.transferQuantityBetweenInvoices(BigInt(from), BigInt(to), BigInt(amt));
+    appendLog('log-tx','inf','Esperando…', tx.hash);
+    const r = await tx.wait();
+    if (r.status === 1)
+      appendLog('log-tx','ok',`✓ Cantidad movida.`, tx.hash);
+    else
+      appendLog('log-tx','err','✗ Revertida');
+  } catch (e) { appendLog('log-tx','err','✗ ' + extractError(e)); }
+}
+</script>
+</body>
+</html>

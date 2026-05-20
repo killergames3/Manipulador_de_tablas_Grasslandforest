@@ -1,0 +1,37 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# tablas.txt — Lista de tablas para setLimit()
+#
+# Formato de cada línea:
+#   NombreTabla , limit , perInvoiceLimit
+#
+# Reglas:
+#   • Líneas con # son comentarios (ignoradas)
+#   • Líneas vacías son ignoradas
+#   • limit         = cantidad TOTAL máxima acumulada de ese tipo en el contrato
+#   • perInvoiceLimit = cantidad máxima que puede tener UNA sola factura de ese tipo
+#   • Ambos valores deben ser enteros positivos > 0
+#   • El nombre no puede superar 64 caracteres
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Armas ─────────────────────────────────────────────────────────────────────
+Espada_Comun,10000,500
+Espada_Rara,5000,250
+Hacha_Comun,10000,500
+Arco_Comun,8000,400
+
+# ── Armaduras ─────────────────────────────────────────────────────────────────
+Escudo_Comun,10000,500
+Escudo_Raro,3000,150
+Casco_Comun,10000,500
+Pechera_Comun,10000,500
+
+# ── Consumibles ───────────────────────────────────────────────────────────────
+Pocion_Vida,50000,1000
+Pocion_Mana,50000,1000
+Antidoto,20000,500
+
+# ── Materiales ────────────────────────────────────────────────────────────────
+Madera,100000,5000
+Piedra,100000,5000
+Hierro,50000,2000
+Oro_Barra,10000,500
