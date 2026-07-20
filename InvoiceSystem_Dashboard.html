@@ -422,6 +422,9 @@
   <div class="info-item"><span>Balance:</span><span id="wi-bal">—</span></div>
   <div class="info-item"><span>Chain ID:</span><span id="wi-chain">—</span></div>
   <div class="info-item"><span>Contrato:</span><span id="wi-contract">—</span></div>
+  <div class="info-item"><span>Rol:</span><span id="wi-role">—</span></div>
+  <div class="info-item"><span>Facturas totales:</span><span id="wi-total">—</span></div>
+  <div class="info-item"><span>Migración:</span><span id="wi-sealed">—</span></div>
 </div>
 
 <!-- ── MAIN ── -->
@@ -554,13 +557,13 @@
           <input id="ci-tipo" type="text" placeholder="Espada_Comun">
         </div>
         <div>
-          <label>Cantidad (uint256)</label>
-          <input id="ci-qty" type="number" min="1" placeholder="100">
+          <label>Cantidad (uint256 — 0 permitido)</label>
+          <input id="ci-qty" type="number" min="0" placeholder="100">
         </div>
       </div>
-      <label>Manual ID (string — max 32 chars)</label>
-      <input id="ci-mid" type="text" placeholder="INV-001">
-      <div class="hint">El manualId es un identificador único que tú controlas. Puede ser cualquier string.</div>
+      <label>Manual ID (string — 1 a 64 chars)</label>
+      <input id="ci-mid" type="text" maxlength="64" placeholder="INV-001">
+      <div class="hint">El manualId es un identificador único que tú controlas (1–64 caracteres). <code>cantidad = 0</code> está permitido: útil para crear los slots de oro/plata vacíos durante el sync.</div>
       <button class="btn btn-success btn-full" onclick="createInvoice()">✚ Crear Factura</button>
       <div class="log-box" id="log-create"><div class="empty">Resultado aquí</div></div>
     </div>
@@ -722,6 +725,52 @@
     </div>
   </div>
 
+  <!-- ══ PANEL: USER INVENTORY ══ -->
+  <div class="panel full-width">
+    <div class="panel-header">
+      <div class="panel-title">
+        <div class="icon icon-green">🎒</div>
+        getUserInventorySnapshot — Inventario on-chain de un jugador
+      </div>
+    </div>
+    <div class="panel-body">
+      <div style="display:flex;gap:8px;margin-bottom:14px;">
+        <input id="ui-user" type="text" placeholder="0xDirección del jugador..." style="margin:0;flex:1;">
+        <button class="btn btn-success" onclick="loadUserInventory()" style="flex-shrink:0;margin:0;">🎒 Cargar inventario</button>
+        <button class="btn btn-secondary" onclick="loadActiveIds()" style="flex-shrink:0;margin:0;">🔢 Solo IDs activos</button>
+      </div>
+      <div id="ui-result" style="display:none;">
+        <table class="batch-table">
+          <thead>
+            <tr><th>ID</th><th>Manual ID</th><th>Tipo</th><th>Cantidad</th><th>Estado</th><th>Creada</th></tr>
+          </thead>
+          <tbody id="ui-tbody"></tbody>
+        </table>
+      </div>
+      <div class="log-box" id="log-ui"><div class="empty">El inventario aparecerá aquí</div></div>
+    </div>
+  </div>
+
+  <!-- ══ PANEL: ADMINS (owner only) ══ -->
+  <div class="panel full-width">
+    <div class="panel-header">
+      <div class="panel-title">
+        <div class="icon icon-yellow">🛡</div>
+        Admins — addAdmin / removeAdmin / isAdmin (solo Owner)
+      </div>
+    </div>
+    <div class="panel-body">
+      <div class="hint">Las funciones de escritura del contrato (<code>setLimit</code>, <code>createInvoice</code>, etc.) requieren rol admin. <code>addAdmin</code> y <code>removeAdmin</code> solo puede llamarlas el owner. Agrega aquí la wallet del relayer/backend de tu juego.</div>
+      <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
+        <input id="adm-addr" type="text" placeholder="0xDirección..." style="margin:0;flex:1;min-width:280px;">
+        <button class="btn btn-success" onclick="adminAction('addAdmin')" style="flex-shrink:0;margin:0;">✚ addAdmin</button>
+        <button class="btn btn-danger" onclick="adminAction('removeAdmin')" style="flex-shrink:0;margin:0;">✖ removeAdmin</button>
+        <button class="btn btn-secondary" onclick="checkIsAdmin()" style="flex-shrink:0;margin:0;">🔎 isAdmin?</button>
+      </div>
+      <div class="log-box" id="log-adm"><div class="empty">Resultado aquí</div></div>
+    </div>
+  </div>
+
 </main>
 
 <!-- ═══════════════════════════════════════════════════════════ SCRIPT ════ -->
@@ -729,27 +778,12 @@
 // ─────────────────────────────────────────────────────────────────────────────
 //  CONFIGURACIÓN
 // ─────────────────────────────────────────────────────────────────────────────
-const CONTRACT_ADDRESS = '0x4356Eb1A19ed6302d1a9582A5d684bF76cafd97e';
+const CONTRACT_ADDRESS = '0x52E07418A64b23F2537d4F682e57e1804d46a089';
 const SOMNIA_CHAIN_ID  = '0xC488'; // 50312 decimal — Somnia Shannon testnet
 const SOMNIA_RPC       = 'https://dream-rpc.somnia.network';
 const EXPLORER_BASE    = 'https://shannon-explorer.somnia.network';
 
-const ABI = [
-  "function setLimit(string calldata _tipo, uint256 _limit, uint256 _perInvoiceLimit) external",
-  "function createInvoice(address _owner, string calldata _tipo, uint256 _cantidad, string calldata _manualId) external returns (uint256)",
-  "function decreaseInvoiceQuantity(uint256 _id, uint256 _decreaseAmount) external returns (uint256)",
-  "function increaseInvoiceQuantity(uint256 _id, uint256 _increaseAmount) external returns (uint256)",
-  "function deleteInvoice(uint256 _id) external",
-  "function deprecateTipo(string calldata _tipo) external",
-  "function transferInvoice(address _fromOwner, address _toOwner, uint256 _id, uint256 _amount, string calldata _newManualId) external returns (uint256)",
-  "function transferQuantityBetweenInvoices(uint256 fromId, uint256 toId, uint256 amount) external",
-  "function getTipoStats(string calldata _tipo) external view returns (uint256 totalQuantity, uint256 limit, uint256 perInvoiceLimit, uint256 invoiceCount, uint256 totalBurned, bool exists)",
-  "function getInvoice(uint256 _id) external view returns (tuple(uint256 id, string manualId, address owner, string tipo, uint256 cantidad, bool active, uint256 createdAt))",
-  "function getInvoiceByManualId(string calldata _manualId) external view returns (tuple(uint256 id, string manualId, address owner, string tipo, uint256 cantidad, bool active, uint256 createdAt))",
-  "function owner() external view returns (address)",
-  "event TipoLimitSet(string tipo, uint256 limit, uint256 perInvoiceLimit)",
-  "event InvoiceCreated(uint256 indexed id, string manualId, address indexed owner, string indexed tipo, uint256 cantidad, uint256 createdAt)"
-];
+const ABI = [{"inputs":[{"internalType":"address","name":"_admin","type":"address"}],"name":"addAdmin","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"initialOwner","type":"address"}],"stateMutability":"nonpayable","type":"constructor"},{"inputs":[{"internalType":"uint256","name":"requested","type":"uint256"},{"internalType":"uint256","name":"maxAllowed","type":"uint256"}],"name":"BatchTooLarge","type":"error"},{"inputs":[],"name":"CannotRenounceOwnership","type":"error"},{"inputs":[],"name":"ExceedsTipoLimit","type":"error"},{"inputs":[],"name":"InsufficientQuantity","type":"error"},{"inputs":[],"name":"InvalidManualIdLength","type":"error"},{"inputs":[],"name":"InvoiceNotActive","type":"error"},{"inputs":[],"name":"InvoiceNotFound","type":"error"},{"inputs":[],"name":"InvoiceWouldExceedPerInvoiceLimit","type":"error"},{"inputs":[],"name":"ManualIdAlreadyExists","type":"error"},{"inputs":[],"name":"ManualIdNotFound","type":"error"},{"inputs":[],"name":"MigrationAlreadySealed","type":"error"},{"inputs":[{"internalType":"address","name":"owner","type":"address"}],"name":"OwnableInvalidOwner","type":"error"},{"inputs":[{"internalType":"address","name":"account","type":"address"}],"name":"OwnableUnauthorizedAccount","type":"error"},{"inputs":[],"name":"PerInvoiceLimitTooLow","type":"error"},{"inputs":[],"name":"ReentrancyGuardReentrantCall","type":"error"},{"inputs":[],"name":"SameInvoice","type":"error"},{"inputs":[],"name":"TipoLimitZero","type":"error"},{"inputs":[],"name":"TipoNotConfigured","type":"error"},{"inputs":[],"name":"TransferAmountZero","type":"error"},{"inputs":[],"name":"Unauthorized","type":"error"},{"inputs":[],"name":"ZeroAddress","type":"error"},{"inputs":[],"name":"ZeroAmount","type":"error"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"admin","type":"address"}],"name":"AdminAdded","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"admin","type":"address"}],"name":"AdminRemoved","type":"event"},{"inputs":[{"internalType":"address","name":"_owner","type":"address"},{"internalType":"string","name":"_tipo","type":"string"},{"internalType":"uint256","name":"_cantidad","type":"uint256"},{"internalType":"string","name":"_manualId","type":"string"}],"name":"createInvoice","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"uint256","name":"_id","type":"uint256"},{"internalType":"uint256","name":"_decreaseAmount","type":"uint256"}],"name":"decreaseInvoiceQuantity","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"uint256","name":"_id","type":"uint256"}],"name":"deleteInvoice","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"string","name":"_tipo","type":"string"}],"name":"deprecateTipo","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"uint256","name":"_id","type":"uint256"},{"internalType":"uint256","name":"_increaseAmount","type":"uint256"}],"name":"increaseInvoiceQuantity","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"nonpayable","type":"function"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"uint256","name":"id","type":"uint256"},{"indexed":false,"internalType":"string","name":"manualId","type":"string"},{"indexed":true,"internalType":"address","name":"owner","type":"address"},{"indexed":true,"internalType":"string","name":"tipo","type":"string"},{"indexed":false,"internalType":"uint256","name":"cantidad","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"createdAt","type":"uint256"}],"name":"InvoiceCreated","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"uint256","name":"id","type":"uint256"},{"indexed":false,"internalType":"string","name":"manualId","type":"string"}],"name":"InvoiceDeleted","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"uint256","name":"id","type":"uint256"},{"indexed":true,"internalType":"address","name":"owner","type":"address"},{"indexed":false,"internalType":"string","name":"tipo","type":"string"},{"indexed":false,"internalType":"uint256","name":"cantidad","type":"uint256"}],"name":"InvoiceMigrated","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"uint256","name":"id","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"decreaseAmount","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"newCantidad","type":"uint256"}],"name":"InvoiceQuantityDecreased","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"uint256","name":"id","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"increaseAmount","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"newCantidad","type":"uint256"}],"name":"InvoiceQuantityIncreased","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"uint256","name":"fromId","type":"uint256"},{"indexed":true,"internalType":"uint256","name":"toId","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"amount","type":"uint256"}],"name":"InvoiceQuantityMoved","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"uint256","name":"originalId","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"newId","type":"uint256"},{"indexed":true,"internalType":"address","name":"from","type":"address"},{"indexed":true,"internalType":"address","name":"to","type":"address"},{"indexed":false,"internalType":"uint256","name":"amount","type":"uint256"}],"name":"InvoiceTransferred","type":"event"},{"anonymous":false,"inputs":[{"indexed":false,"internalType":"string","name":"manualId","type":"string"}],"name":"ManualIdFreed","type":"event"},{"inputs":[{"components":[{"internalType":"uint256","name":"id","type":"uint256"},{"internalType":"string","name":"manualId","type":"string"},{"internalType":"address","name":"owner","type":"address"},{"internalType":"string","name":"tipo","type":"string"},{"internalType":"uint256","name":"cantidad","type":"uint256"},{"internalType":"bool","name":"active","type":"bool"},{"internalType":"uint256","name":"createdAt","type":"uint256"}],"internalType":"struct InvoiceSystem.Invoice[]","name":"batch","type":"tuple[]"}],"name":"migrateInvoicesBatch","outputs":[],"stateMutability":"nonpayable","type":"function"},{"anonymous":false,"inputs":[],"name":"MigrationSealed","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"previousOwner","type":"address"},{"indexed":true,"internalType":"address","name":"newOwner","type":"address"}],"name":"OwnershipTransferred","type":"event"},{"inputs":[{"internalType":"address","name":"_admin","type":"address"}],"name":"removeAdmin","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"renounceOwnership","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"sealMigration","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"string","name":"_tipo","type":"string"},{"internalType":"uint256","name":"_limit","type":"uint256"},{"internalType":"uint256","name":"_perInvoiceLimit","type":"uint256"}],"name":"setLimit","outputs":[],"stateMutability":"nonpayable","type":"function"},{"anonymous":false,"inputs":[{"indexed":false,"internalType":"string","name":"tipo","type":"string"}],"name":"TipoDeprecated","type":"event"},{"anonymous":false,"inputs":[{"indexed":false,"internalType":"string","name":"tipo","type":"string"},{"indexed":false,"internalType":"uint256","name":"limit","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"perInvoiceLimit","type":"uint256"}],"name":"TipoLimitSet","type":"event"},{"inputs":[{"internalType":"address","name":"_fromOwner","type":"address"},{"internalType":"address","name":"_toOwner","type":"address"},{"internalType":"uint256","name":"_id","type":"uint256"},{"internalType":"uint256","name":"_amount","type":"uint256"},{"internalType":"string","name":"_newManualId","type":"string"}],"name":"transferInvoice","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"newOwner","type":"address"}],"name":"transferOwnership","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"uint256","name":"fromId","type":"uint256"},{"internalType":"uint256","name":"toId","type":"uint256"},{"internalType":"uint256","name":"amount","type":"uint256"}],"name":"transferQuantityBetweenInvoices","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"uint256[]","name":"slotIds","type":"uint256[]"},{"internalType":"string[]","name":"slotManualIds","type":"string[]"}],"name":"batchVerifySlots","outputs":[{"internalType":"bool[]","name":"valid","type":"bool[]"},{"internalType":"uint256[]","name":"canonicalQty","type":"uint256[]"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"user","type":"address"}],"name":"getActiveInvoiceIds","outputs":[{"internalType":"uint256[]","name":"","type":"uint256[]"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"_id","type":"uint256"}],"name":"getInvoice","outputs":[{"components":[{"internalType":"uint256","name":"id","type":"uint256"},{"internalType":"string","name":"manualId","type":"string"},{"internalType":"address","name":"owner","type":"address"},{"internalType":"string","name":"tipo","type":"string"},{"internalType":"uint256","name":"cantidad","type":"uint256"},{"internalType":"bool","name":"active","type":"bool"},{"internalType":"uint256","name":"createdAt","type":"uint256"}],"internalType":"struct InvoiceSystem.Invoice","name":"","type":"tuple"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"string","name":"_manualId","type":"string"}],"name":"getInvoiceByManualId","outputs":[{"components":[{"internalType":"uint256","name":"id","type":"uint256"},{"internalType":"string","name":"manualId","type":"string"},{"internalType":"address","name":"owner","type":"address"},{"internalType":"string","name":"tipo","type":"string"},{"internalType":"uint256","name":"cantidad","type":"uint256"},{"internalType":"bool","name":"active","type":"bool"},{"internalType":"uint256","name":"createdAt","type":"uint256"}],"internalType":"struct InvoiceSystem.Invoice","name":"","type":"tuple"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"string","name":"_manualId","type":"string"}],"name":"getInvoiceByManualIdSafe","outputs":[{"components":[{"internalType":"uint256","name":"id","type":"uint256"},{"internalType":"string","name":"manualId","type":"string"},{"internalType":"address","name":"owner","type":"address"},{"internalType":"string","name":"tipo","type":"string"},{"internalType":"uint256","name":"cantidad","type":"uint256"},{"internalType":"bool","name":"active","type":"bool"},{"internalType":"uint256","name":"createdAt","type":"uint256"}],"internalType":"struct InvoiceSystem.Invoice","name":"inv","type":"tuple"},{"internalType":"bool","name":"found","type":"bool"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256[]","name":"ids","type":"uint256[]"}],"name":"getInvoicesSafe","outputs":[{"components":[{"internalType":"uint256","name":"id","type":"uint256"},{"internalType":"string","name":"manualId","type":"string"},{"internalType":"address","name":"owner","type":"address"},{"internalType":"string","name":"tipo","type":"string"},{"internalType":"uint256","name":"cantidad","type":"uint256"},{"internalType":"bool","name":"active","type":"bool"},{"internalType":"uint256","name":"createdAt","type":"uint256"}],"internalType":"struct InvoiceSystem.Invoice[]","name":"result","type":"tuple[]"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"string","name":"_tipo","type":"string"}],"name":"getTipoStats","outputs":[{"internalType":"uint256","name":"totalQuantity","type":"uint256"},{"internalType":"uint256","name":"limit","type":"uint256"},{"internalType":"uint256","name":"perInvoiceLimit","type":"uint256"},{"internalType":"uint256","name":"invoiceCount","type":"uint256"},{"internalType":"uint256","name":"totalBurned","type":"uint256"},{"internalType":"bool","name":"exists","type":"bool"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"user","type":"address"}],"name":"getUserInventorySnapshot","outputs":[{"components":[{"internalType":"uint256","name":"id","type":"uint256"},{"internalType":"string","name":"manualId","type":"string"},{"internalType":"address","name":"owner","type":"address"},{"internalType":"string","name":"tipo","type":"string"},{"internalType":"uint256","name":"cantidad","type":"uint256"},{"internalType":"bool","name":"active","type":"bool"},{"internalType":"uint256","name":"createdAt","type":"uint256"}],"internalType":"struct InvoiceSystem.Invoice[]","name":"result","type":"tuple[]"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"_who","type":"address"}],"name":"isAdmin","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"MAX_BATCH_SIZE","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"migrationSealed","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"owner","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"totalInvoicesEver","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"}];
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  STATE
@@ -855,6 +889,30 @@ async function connectWallet() {
     // auto-fill ci-owner
     document.getElementById('ci-owner').value = addr;
     document.getElementById('tf-from').value  = addr;
+    document.getElementById('ui-user').value  = addr;
+
+    // Verificar rol y estado del contrato (no bloquear la conexión si falla)
+    try {
+      const [ownerAddr, admin, total, sealed] = await Promise.all([
+        contract.owner(),
+        contract.isAdmin(addr),
+        contract.totalInvoicesEver(),
+        contract.migrationSealed(),
+      ]);
+      const isOwner = ownerAddr.toLowerCase() === addr.toLowerCase();
+      const roleEl = document.getElementById('wi-role');
+      if (isOwner)      { roleEl.textContent = '👑 Owner'; roleEl.style.color = 'var(--yellow)'; }
+      else if (admin)   { roleEl.textContent = '🛡 Admin'; roleEl.style.color = 'var(--green)'; }
+      else              { roleEl.textContent = '⚠ Sin permisos (las tx de escritura fallarán)'; roleEl.style.color = 'var(--red)'; }
+      document.getElementById('wi-total').textContent  = total.toString();
+      const sealedEl = document.getElementById('wi-sealed');
+      sealedEl.textContent = sealed ? '🔒 Sellada' : '🔓 Abierta';
+      sealedEl.style.color = sealed ? 'var(--dim)' : 'var(--accent)';
+    } catch (stErr) {
+      console.warn('No se pudo leer el estado del contrato:', stErr);
+      document.getElementById('wi-role').textContent = '¿Contrato correcto? Falló la lectura';
+      document.getElementById('wi-role').style.color = 'var(--red)';
+    }
 
   } catch (e) {
     btn.textContent = '⚡ Conectar Wallet';
@@ -909,7 +967,48 @@ function requireConnected(logId) {
   return true;
 }
 
+// Mensajes amigables para los errores custom del contrato
+const ERROR_MESSAGES = {
+  BatchTooLarge:                     'Lote demasiado grande (excede MAX_BATCH_SIZE)',
+  CannotRenounceOwnership:           'No se puede renunciar al ownership de este contrato',
+  ExceedsTipoLimit:                  'La cantidad excede el límite global del tipo',
+  InsufficientQuantity:              'Cantidad insuficiente en la factura',
+  InvalidManualIdLength:             'Manual ID inválido (debe tener entre 1 y 64 caracteres)',
+  InvoiceNotActive:                  'La factura no está activa',
+  InvoiceNotFound:                   'Factura no encontrada',
+  InvoiceWouldExceedPerInvoiceLimit: 'Excedería el límite por factura (perInvoiceLimit) del tipo',
+  ManualIdAlreadyExists:             'Ese Manual ID ya existe — usa uno diferente',
+  ManualIdNotFound:                  'Manual ID no encontrado',
+  MigrationAlreadySealed:            'La migración ya fue sellada — no se puede migrar más',
+  OwnableUnauthorizedAccount:        'Solo el OWNER del contrato puede hacer esto',
+  PerInvoiceLimitTooLow:             'perInvoiceLimit demasiado bajo (hay facturas que lo superan)',
+  ReentrancyGuardReentrantCall:      'Llamada reentrante bloqueada',
+  SameInvoice:                       'Las facturas origen y destino son la misma',
+  TipoLimitZero:                     'El límite del tipo no puede ser 0',
+  TipoNotConfigured:                 'El tipo no está configurado — llama setLimit() primero',
+  TransferAmountZero:                'La cantidad a transferir no puede ser 0',
+  Unauthorized:                      'No autorizado — tu wallet no es admin del contrato',
+  ZeroAddress:                       'Dirección 0x0 no permitida',
+  ZeroAmount:                        'La cantidad no puede ser 0 en esta operación',
+};
+
 function extractError(err) {
+  // 1) Intentar decodificar error custom del contrato (revert data)
+  try {
+    const data = err?.data ?? err?.info?.error?.data ?? err?.error?.data;
+    if (data && contract) {
+      const parsed = contract.interface.parseError(data);
+      if (parsed) {
+        const friendly = ERROR_MESSAGES[parsed.name];
+        const args = parsed.args?.length ? ` (${parsed.args.map(a=>a.toString()).join(', ')})` : '';
+        return (friendly || parsed.name) + args;
+      }
+    }
+  } catch (_) { /* seguir con fallbacks */ }
+
+  // 2) ethers v6 a veces ya trae el nombre del error decodificado
+  if (err?.revert?.name) return ERROR_MESSAGES[err.revert.name] || err.revert.name;
+  if (err?.reason && ERROR_MESSAGES[err.reason]) return ERROR_MESSAGES[err.reason];
   if (err?.reason)        return err.reason;
   if (err?.shortMessage)  return err.shortMessage;
   const m = err?.message || '';
@@ -1197,8 +1296,12 @@ async function getInvoiceByMid() {
   const mid = document.getElementById('gi-mid').value.trim();
   if (!mid) { appendLog('log-inv','warn','Ingresa un Manual ID.'); return; }
   try {
-    appendLog('log-inv','inf',`getInvoiceByManualId("${mid}")…`);
-    const inv = await contract.getInvoiceByManualId(mid);
+    appendLog('log-inv','inf',`getInvoiceByManualIdSafe("${mid}")…`);
+    const [inv, found] = await contract.getInvoiceByManualIdSafe(mid);
+    if (!found) {
+      appendLog('log-inv','warn',`Manual ID "${mid}" no existe en el contrato.`);
+      return;
+    }
     fillInvoiceCard(inv);
     appendLog('log-inv','ok','✓ Factura cargada.');
   } catch (e) { appendLog('log-inv','err','✗ ' + extractError(e)); }
@@ -1306,6 +1409,88 @@ async function transferQtyBetween() {
     else
       appendLog('log-tx','err','✗ Revertida');
   } catch (e) { appendLog('log-tx','err','✗ ' + extractError(e)); }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  USER INVENTORY (getUserInventorySnapshot / getActiveInvoiceIds)
+// ─────────────────────────────────────────────────────────────────────────────
+function escHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+async function loadUserInventory() {
+  if (!requireConnected('log-ui')) return;
+  const user = document.getElementById('ui-user').value.trim();
+  if (!ethers.isAddress(user)) { appendLog('log-ui','warn','Dirección inválida.'); return; }
+  try {
+    appendLog('log-ui','inf',`getUserInventorySnapshot(${shortAddr(user)})…`);
+    const invoices = await contract.getUserInventorySnapshot(user);
+    const tbody = document.getElementById('ui-tbody');
+    tbody.innerHTML = '';
+    if (!invoices.length) {
+      document.getElementById('ui-result').style.display = 'none';
+      appendLog('log-ui','warn','Este usuario no tiene facturas activas.');
+      return;
+    }
+    for (const inv of invoices) {
+      tbody.innerHTML += `
+        <tr>
+          <td>${inv.id.toString()}</td>
+          <td>${escHtml(inv.manualId)}</td>
+          <td>${escHtml(inv.tipo)}</td>
+          <td>${fmtBig(inv.cantidad)}</td>
+          <td><span class="badge ${inv.active ? 'badge-ok' : 'badge-err'}">${inv.active ? 'Activa' : 'Inactiva'}</span></td>
+          <td>${new Date(Number(inv.createdAt) * 1000).toLocaleString('es')}</td>
+        </tr>`;
+    }
+    document.getElementById('ui-result').style.display = 'block';
+    appendLog('log-ui','ok',`✓ ${invoices.length} facturas cargadas.`);
+  } catch (e) { appendLog('log-ui','err','✗ ' + extractError(e)); }
+}
+
+async function loadActiveIds() {
+  if (!requireConnected('log-ui')) return;
+  const user = document.getElementById('ui-user').value.trim();
+  if (!ethers.isAddress(user)) { appendLog('log-ui','warn','Dirección inválida.'); return; }
+  try {
+    appendLog('log-ui','inf',`getActiveInvoiceIds(${shortAddr(user)})…`);
+    const ids = await contract.getActiveInvoiceIds(user);
+    if (!ids.length) { appendLog('log-ui','warn','Sin IDs activos.'); return; }
+    appendLog('log-ui','ok',`✓ IDs activos: [${ids.map(i=>i.toString()).join(', ')}]`);
+  } catch (e) { appendLog('log-ui','err','✗ ' + extractError(e)); }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  ADMINS (addAdmin / removeAdmin / isAdmin — owner only para escritura)
+// ─────────────────────────────────────────────────────────────────────────────
+async function adminAction(fn) {
+  if (!requireConnected('log-adm')) return;
+  const addr = document.getElementById('adm-addr').value.trim();
+  if (!ethers.isAddress(addr)) { appendLog('log-adm','warn','Dirección inválida.'); return; }
+  if (fn === 'removeAdmin' && !confirm(`¿Quitar rol admin a ${addr}?`)) return;
+  try {
+    appendLog('log-adm','inf',`${fn}(${shortAddr(addr)})…`);
+    const tx = await contract[fn](addr);
+    appendLog('log-adm','inf','Esperando confirmación…', tx.hash);
+    const r = await tx.wait();
+    if (r.status === 1)
+      appendLog('log-adm','ok',`✓ ${fn} OK — gas: ${r.gasUsed.toLocaleString()}`, tx.hash);
+    else
+      appendLog('log-adm','err','✗ Revertida');
+  } catch (e) { appendLog('log-adm','err','✗ ' + extractError(e)); }
+}
+
+async function checkIsAdmin() {
+  if (!requireConnected('log-adm')) return;
+  const addr = document.getElementById('adm-addr').value.trim();
+  if (!ethers.isAddress(addr)) { appendLog('log-adm','warn','Dirección inválida.'); return; }
+  try {
+    const [admin, ownerAddr] = await Promise.all([contract.isAdmin(addr), contract.owner()]);
+    const isOwner = ownerAddr.toLowerCase() === addr.toLowerCase();
+    if (isOwner)     appendLog('log-adm','ok',`👑 ${shortAddr(addr)} es el OWNER del contrato.`);
+    else if (admin)  appendLog('log-adm','ok',`🛡 ${shortAddr(addr)} SÍ es admin.`);
+    else             appendLog('log-adm','warn',`${shortAddr(addr)} NO es admin ni owner.`);
+  } catch (e) { appendLog('log-adm','err','✗ ' + extractError(e)); }
 }
 </script>
 </body>
